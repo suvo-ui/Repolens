@@ -8,6 +8,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { BrandMark } from "../components/BrandMark";
+import { UserMenu } from "../components/UserMenu";
 import { useAnalysisHistory } from "../hooks/useAnalysisHistory";
 
 interface HistoryPageProps {
@@ -29,12 +30,15 @@ export function HistoryPage({ onBack, onOpen }: HistoryPageProps) {
     <main className="min-h-screen px-5 py-6 sm:px-10 lg:px-16">
       <header className="mx-auto flex max-w-7xl items-center justify-between border-b border-ink/10 pb-5">
         <BrandMark />
-        <button
-          onClick={onBack}
-          className="inline-flex items-center gap-2 rounded-xl border border-ink/10 bg-white/70 px-3 py-2 text-sm font-bold text-ink transition hover:border-coral hover:text-coral"
-        >
-          <ArrowLeft size={16} /> New analysis
-        </button>
+        <div className="flex items-center gap-4">
+          <UserMenu />
+          <button
+            onClick={onBack}
+            className="inline-flex items-center gap-2 rounded-xl border border-ink/10 bg-white/70 px-3 py-2 text-sm font-bold text-ink transition hover:border-coral hover:text-coral"
+          >
+            <ArrowLeft size={16} /> New analysis
+          </button>
+        </div>
       </header>
       <section className="mx-auto max-w-7xl pb-16 pt-10">
         <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">

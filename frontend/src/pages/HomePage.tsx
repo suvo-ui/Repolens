@@ -8,6 +8,7 @@ import {
 import { useState } from "react";
 import { AnalysisProgress } from "../components/AnalysisProgress";
 import { BrandMark } from "../components/BrandMark";
+import { UserMenu } from "../components/UserMenu";
 
 interface HomePageProps {
   isLoading: boolean;
@@ -51,6 +52,7 @@ export function HomePage({
           >
             History
           </button>
+          <UserMenu />
           <span className="hidden items-center gap-2 sm:flex">
             <span className="size-2 rounded-full bg-lime" /> Private by design
           </span>

@@ -1,4 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
+import { env } from "../config/env";
+import { SESSION_COOKIE_NAME } from "../app";
 import { AuthService } from "../services/auth.service";
 
 export function createAuthController(authService: AuthService) {
@@ -32,7 +34,13 @@ export function createAuthController(authService: AuthService) {
     ) => {
       try {
         await destroySession(request);
-        response.clearCookie("repolens.sid");
+        // Clear with the same attributes the session cookie was set with,
+        // otherwise SameSite=None; Secure cookies are not removed.
+        response.clearCookie(SESSION_COOKIE_NAME, {
+          httpOnly: true,
+          secure: env.nodeEnv === "production",
+          sameSite: env.nodeEnv === "production" ? "none" : "lax",
+        });
         response.status(204).send();
       } catch (error) {
         next(error);

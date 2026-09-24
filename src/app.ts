@@ -6,8 +6,20 @@ import { errorHandler } from "./middleware/error.middleware";
 import { notFoundHandler } from "./middleware/not-found.middleware";
 import { apiRouter } from "./routes";
 
+export const SESSION_COOKIE_NAME = "repolens.sid";
+
+/**
+ * The deployed architecture runs the frontend (Vercel) and API (Render) on
+ * different origins, so the session cookie must be SameSite=None + Secure in
+ * production. Render terminates TLS in front of the app, so trust the first
+ * proxy for secure cookies and rate limiting to behave correctly.
+ */
 export function createApp(store?: session.Store) {
   const app = express();
+
+  if (env.nodeEnv === "production") {
+    app.set("trust proxy", 1);
+  }
 
   app.use(
     cors({
@@ -29,7 +41,7 @@ export function createApp(store?: session.Store) {
       cookie: {
         httpOnly: true,
         secure: env.nodeEnv === "production",
-        sameSite: "lax",
+        sameSite: env.nodeEnv === "production" ? "none" : "lax",
         maxAge: env.sessionMaxAgeMs,
       },
     }),
