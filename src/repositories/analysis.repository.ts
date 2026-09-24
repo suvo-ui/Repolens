@@ -7,8 +7,8 @@ import type {
 
 export interface AnalysisRepository {
   create(input: PersistedAnalysisInput): Promise<string>;
-  findById(id: string): Promise<PersistedAnalysis | null>;
-  findRecent(limit?: number): Promise<AnalysisHistoryItem[]>;
+  findById(id: string, userId: string): Promise<PersistedAnalysis | null>;
+  findRecent(userId: string, limit?: number): Promise<AnalysisHistoryItem[]>;
 }
 
 export class AnalysisRepositoryError extends Error {
@@ -31,9 +31,14 @@ export class MongooseAnalysisRepository implements AnalysisRepository {
     }
   }
 
-  async findById(id: string): Promise<PersistedAnalysis | null> {
+  async findById(
+    id: string,
+    userId: string,
+  ): Promise<PersistedAnalysis | null> {
     try {
-      return await AnalysisModel.findById(id).lean<PersistedAnalysis>().exec();
+      return await AnalysisModel.findOne({ _id: id, userId })
+        .lean<PersistedAnalysis>()
+        .exec();
     } catch (error) {
       throw new AnalysisRepositoryError(
         "Unable to retrieve repository analysis",
@@ -42,9 +47,9 @@ export class MongooseAnalysisRepository implements AnalysisRepository {
     }
   }
 
-  async findRecent(limit = 25): Promise<AnalysisHistoryItem[]> {
+  async findRecent(userId: string, limit = 25): Promise<AnalysisHistoryItem[]> {
     try {
-      const analyses = await AnalysisModel.find()
+      const analyses = await AnalysisModel.find({ userId })
         .sort({ createdAt: -1 })
         .limit(limit)
         .select({

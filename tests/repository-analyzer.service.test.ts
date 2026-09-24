@@ -100,6 +100,26 @@ describe("RepositoryAnalyzerService", () => {
     expect(github.getRepositoryMetadata).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "https://user:password@github.com/octocat/analyser",
+    "https://github.com:444/octocat/analyser",
+    "https://github.com/octocat%2Fanalyser",
+    "https://github.com/octocat/analyser/extra",
+  ])("rejects unsafe repository URL %s", async (repositoryUrl) => {
+    const github = client();
+    const analyzer = new RepositoryAnalyzerService(
+      github,
+      new RepositoryFileSelectionService(),
+      llm(),
+      logger(),
+    );
+
+    await expect(analyzer.analyze(repositoryUrl)).rejects.toThrow(
+      "Invalid GitHub repository URL",
+    );
+    expect(github.getRepositoryMetadata).not.toHaveBeenCalled();
+  });
+
   it("runs the complete pipeline and passes repository context to the LLM", async () => {
     const github = client({
       getRepositoryFileTree: vi
@@ -215,6 +235,23 @@ describe("RepositoryAnalyzerService", () => {
     expect(warnings.warn).toHaveBeenCalledWith(
       "Skipping src/a.ts because its content could not be retrieved",
     );
+  });
+
+  it("does not send oversized decoded content to the LLM", async () => {
+    const llmService = llm();
+    const analyzer = new RepositoryAnalyzerService(
+      client({
+        getFileContent: vi.fn().mockResolvedValue("x".repeat(100_001)),
+      }),
+      new RepositoryFileSelectionService(),
+      llmService,
+      logger(),
+    );
+
+    await expect(
+      analyzer.analyze("https://github.com/octocat/analyser"),
+    ).rejects.toThrow("Unable to retrieve any analyzable repository files");
+    expect(llmService.analyzeFiles).not.toHaveBeenCalled();
   });
 
   it("propagates LLM failures after building the context", async () => {

@@ -1,5 +1,5 @@
 import { model, Schema, type Types } from "mongoose";
-import { z } from "zod";
+import { z } from "zod/v3";
 import type {
   RepositoryFile,
   RepositoryMetadata,
@@ -39,32 +39,38 @@ const repositoryFileSchema = z
   })
   .strict();
 
-export const persistedAnalysisSchema = z
-  .object({
-    repositoryUrl: z.string().url(),
-    owner: z.string().min(1),
-    repositoryName: z.string().min(1),
-    commitSha: z.string().nullable(),
-    repository: repositoryMetadataSchema,
-    selectedFiles: z.array(repositoryFileSchema),
-    analysis: codeAnalysisReportSchema,
-    createdAt: z.date(),
-  })
-  .strict();
+export const persistedAnalysisSchema = z.object({
+  userId: z.string().min(1),
+  repositoryUrl: z.string().url(),
+  owner: z.string().min(1),
+  repositoryName: z.string().min(1),
+  commitSha: z.string().nullable(),
+  repository: repositoryMetadataSchema,
+  selectedFiles: z.array(repositoryFileSchema),
+  analyzedFiles: z.array(z.string().min(1)),
+  analysis: codeAnalysisReportSchema,
+  createdAt: z.date(),
+});
 
 export interface PersistedAnalysisInput {
+  userId: string;
   repositoryUrl: string;
   owner: string;
   repositoryName: string;
   commitSha: string | null;
   repository: RepositoryMetadata;
   selectedFiles: RepositoryFile[];
+  analyzedFiles: string[];
   analysis: CodeAnalysisReport;
   createdAt: Date;
 }
 
 export interface PersistedAnalysis extends PersistedAnalysisInput {
   _id: Types.ObjectId;
+}
+
+interface PersistedAnalysisDocument extends Omit<PersistedAnalysis, "userId"> {
+  userId: Types.ObjectId;
 }
 
 export interface AnalysisHistoryItem {
@@ -76,21 +82,28 @@ export interface AnalysisHistoryItem {
   summary: string;
 }
 
-const analysisSchema = new Schema<PersistedAnalysis>(
+const analysisSchema = new Schema<PersistedAnalysisDocument>(
   {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
     repositoryUrl: { type: String, required: true, index: true },
     owner: { type: String, required: true, index: true },
     repositoryName: { type: String, required: true, index: true },
     commitSha: { type: String, default: null },
     repository: { type: Schema.Types.Mixed, required: true },
-    selectedFiles: { type: Schema.Types.Mixed, required: true },
-    analysis: { type: Schema.Types.Mixed, required: true },
     createdAt: { type: Date, required: true, default: Date.now, index: true },
+    selectedFiles: { type: Schema.Types.Mixed, required: true },
+    analyzedFiles: { type: [String], required: true },
+    analysis: { type: Schema.Types.Mixed, required: true },
   },
   { versionKey: false },
 );
 
-export const AnalysisModel = model<PersistedAnalysis>(
+export const AnalysisModel = model<PersistedAnalysisDocument>(
   "Analysis",
   analysisSchema,
 );

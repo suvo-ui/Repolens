@@ -1,4 +1,5 @@
 import express from "express";
+import type { RequestHandler } from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -104,7 +105,18 @@ function integrationApp(
   );
   const testApp = express();
   testApp.use(express.json());
-  testApp.use("/api/analyze", createAnalyzeRouter(analyzer));
+  const authenticatedTestUser: RequestHandler = (request, _response, next) => {
+    request.user = {
+      id: "507f1f77bcf86cd799439011",
+      name: "Test User",
+      email: "test@example.com",
+    };
+    next();
+  };
+  testApp.use(
+    "/api/analyze",
+    createAnalyzeRouter(analyzer, authenticatedTestUser),
+  );
   testApp.use(errorHandler);
   return testApp;
 }

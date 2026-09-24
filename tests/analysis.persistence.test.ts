@@ -41,6 +41,7 @@ const metadata: RepositoryMetadata = {
   updatedAt: "2026-01-01T00:00:00Z",
   pushedAt: null,
 };
+const userId = "507f1f77bcf86cd799439011";
 
 const file: RepositoryFile = {
   path: "src/index.ts",
@@ -98,11 +99,15 @@ describe("analysis persistence", () => {
       persistence,
     );
 
-    const result = await service.analyze("https://github.com/owner/repo");
+    const result = await service.analyze(
+      "https://github.com/owner/repo",
+      userId,
+    );
     const savedInput = vi.mocked(persistence.create).mock.calls[0]?.[0];
 
     expect(result.analysisId).toBe("507f1f77bcf86cd799439011");
     expect(savedInput).toMatchObject({
+      userId,
       repositoryUrl: "https://github.com/owner/repo",
       owner: "owner",
       repositoryName: "repo",
@@ -128,13 +133,14 @@ describe("analysis persistence", () => {
     );
 
     await expect(
-      service.analyze("https://github.com/owner/repo"),
+      service.analyze("https://github.com/owner/repo", userId),
     ).rejects.toThrow("Mongo unavailable");
   });
 
   it("retrieves a persisted analysis by ID through the HTTP controller", async () => {
     const persisted = {
       _id: "507f1f77bcf86cd799439011",
+      userId,
       repositoryUrl: "https://github.com/owner/repo",
       owner: "owner",
       repositoryName: "repo",
@@ -151,6 +157,14 @@ describe("analysis persistence", () => {
     };
     const app = express();
     app.use(express.json());
+    app.use((request, _response, next) => {
+      request.user = {
+        id: userId,
+        name: "Test User",
+        email: "test@example.com",
+      };
+      next();
+    });
     app.get("/api/analyses/:id", createGetAnalysisController(persistence));
     app.use(errorHandler);
 
@@ -180,6 +194,14 @@ describe("analysis persistence", () => {
       findRecent: vi.fn().mockResolvedValue(history),
     };
     const app = express();
+    app.use((request, _response, next) => {
+      request.user = {
+        id: userId,
+        name: "Test User",
+        email: "test@example.com",
+      };
+      next();
+    });
     app.get("/api/analyses", createListAnalysesController(persistence));
     app.use(errorHandler);
 

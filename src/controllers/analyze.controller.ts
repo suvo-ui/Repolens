@@ -34,7 +34,10 @@ export function createAnalyzeController(analyzer: RepositoryAnalyzer) {
     }
 
     try {
-      const result = await analyzer.analyze(parsedRequest.data.repositoryUrl);
+      const result = await analyzer.analyze(
+        parsedRequest.data.repositoryUrl,
+        request.user?.id,
+      );
       response.status(200).json(result);
     } catch (error) {
       next(error);

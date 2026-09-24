@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { env } from "../config/env";
 import type { GitHubClient } from "../clients/github.client";
 import type { AnalysisRepository } from "../repositories/analysis.repository";
 import {
@@ -29,6 +30,7 @@ export class RepositoryQuestionService {
   async ask(
     analysisId: string,
     question: string,
+    userId: string,
   ): Promise<RepositoryQuestionAnswer> {
     const parsedQuestion = questionSchema.safeParse(question);
     if (!parsedQuestion.success) {
@@ -37,39 +39,42 @@ export class RepositoryQuestionService {
       );
     }
 
-    const savedAnalysis = await this.analysisRepository.findById(analysisId);
+    const savedAnalysis = await this.analysisRepository.findById(
+      analysisId,
+      userId,
+    );
     if (!savedAnalysis) {
       throw new RepositoryQuestionError("Analysis not found", 404);
     }
 
-    const sourceFiles = await Promise.all(
-      savedAnalysis.selectedFiles.map(
-        async (file): Promise<SelectedSourceFile | null> => {
-          try {
-            return {
-              path: file.path,
-              content: await this.githubClient.getFileContent(
-                savedAnalysis.owner,
-                savedAnalysis.repositoryName,
-                file.path,
-              ),
-            };
-          } catch {
-            return null;
-          }
-        },
-      ),
-    );
+    const sourceFiles: SelectedSourceFile[] = [];
+    let totalBytes = 0;
+    for (const file of savedAnalysis.selectedFiles) {
+      try {
+        const content = await this.githubClient.getFileContent(
+          savedAnalysis.owner,
+          savedAnalysis.repositoryName,
+          file.path,
+        );
+        const contentBytes = Buffer.byteLength(content, "utf8");
+        if (
+          contentBytes > env.maxSourceFileBytes ||
+          totalBytes + contentBytes > env.maxSourceContentBytes
+        ) {
+          continue;
+        }
+        sourceFiles.push({ path: file.path, content });
+        totalBytes += contentBytes;
+      } catch {
+        continue;
+      }
+    }
 
-    return this.llmService.answerQuestion(
-      parsedQuestion.data,
-      sourceFiles.filter((file): file is SelectedSourceFile => file !== null),
-      {
-        repository: savedAnalysis.repository,
-        analysisSummary: savedAnalysis.analysis.summary,
-        architectureOverview: savedAnalysis.analysis.architecture.overview,
-        selectedFilePaths: savedAnalysis.selectedFiles.map((file) => file.path),
-      },
-    );
+    return this.llmService.answerQuestion(parsedQuestion.data, sourceFiles, {
+      repository: savedAnalysis.repository,
+      analysisSummary: savedAnalysis.analysis.summary,
+      architectureOverview: savedAnalysis.analysis.architecture.overview,
+      selectedFilePaths: savedAnalysis.selectedFiles.map((file) => file.path),
+    });
   }
 }

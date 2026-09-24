@@ -36,6 +36,7 @@ const selectedFile: RepositoryFile = {
   size: 10,
   url: "https://api.github.com/blob/sha",
 };
+const userId = "507f1f77bcf86cd799439011";
 const analysis: CodeAnalysisReport = {
   summary: "A repository with authentication code.",
   architecture: {
@@ -53,6 +54,7 @@ const analysis: CodeAnalysisReport = {
 function savedAnalysis(): PersistedAnalysis {
   return {
     _id: "507f1f77bcf86cd799439011" as unknown as PersistedAnalysis["_id"],
+    userId,
     repositoryUrl: "https://github.com/owner/repo",
     owner: "owner",
     repositoryName: "repo",
@@ -87,7 +89,11 @@ describe("RepositoryQuestionService", () => {
     } as Pick<LlmCodeAnalysisService, "answerQuestion">);
 
     await expect(
-      service.ask("analysis-id", "Where is authentication implemented?"),
+      service.ask(
+        "analysis-id",
+        "Where is authentication implemented?",
+        userId,
+      ),
     ).resolves.toEqual({
       answer: "Authentication is implemented in src/auth.ts.",
       relevantFiles: ["src/auth.ts"],
@@ -116,7 +122,7 @@ describe("RepositoryQuestionService", () => {
       {} as Pick<LlmCodeAnalysisService, "answerQuestion">,
     );
 
-    await expect(service.ask("analysis-id", "  ")).rejects.toThrow(
+    await expect(service.ask("analysis-id", "  ", userId)).rejects.toThrow(
       "Question must be",
     );
     expect(repository.findById).not.toHaveBeenCalled();
@@ -144,7 +150,7 @@ describe("RepositoryQuestionService", () => {
     } as Pick<LlmCodeAnalysisService, "answerQuestion">);
 
     await expect(
-      service.ask("analysis-id", "Where is billing implemented?"),
+      service.ask("analysis-id", "Where is billing implemented?", userId),
     ).resolves.toEqual({
       answer: "The available repository context is insufficient.",
       relevantFiles: [],

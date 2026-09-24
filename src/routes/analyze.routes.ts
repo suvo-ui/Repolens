@@ -1,8 +1,10 @@
 import { Router } from "express";
+import type { RequestHandler } from "express";
 import { GitHubApiClient } from "../clients/github.client";
 import { env } from "../config/env";
 import { createAnalyzeController } from "../controllers/analyze.controller";
 import { createRateLimiter } from "../middleware/rate-limit.middleware";
+import { requireAuth } from "../middleware/auth.middleware";
 import { MongooseAnalysisRepository } from "../repositories/analysis.repository";
 import { LlmCodeAnalysisService } from "../services/llm.service";
 import {
@@ -11,10 +13,14 @@ import {
 } from "../services/repository-analyzer.service";
 import { RepositoryFileSelectionService } from "../services/repository-file-selection.service";
 
-export function createAnalyzeRouter(analyzer: RepositoryAnalyzer): Router {
+export function createAnalyzeRouter(
+  analyzer: RepositoryAnalyzer,
+  authentication: RequestHandler = requireAuth,
+): Router {
   const router = Router();
   router.post(
     "/",
+    authentication,
     createRateLimiter({
       windowMs: env.analyzeRateLimitWindowMs,
       maxRequests: env.analyzeRateLimitMax,

@@ -3,6 +3,7 @@ import {
   RepositoryFile,
   RepositoryMetadata,
 } from "../clients/github.client";
+import { env } from "../config/env";
 import {
   CodeAnalysisReport,
   LlmCodeAnalysisService,
@@ -17,7 +18,10 @@ import {
 import type { AnalysisRepository } from "../repositories/analysis.repository";
 
 export interface RepositoryAnalyzer {
-  analyze(repositoryUrl: string): Promise<RepositoryAnalysisResult>;
+  analyze(
+    repositoryUrl: string,
+    userId?: string,
+  ): Promise<RepositoryAnalysisResult>;
 }
 
 export interface RepositoryAnalysisResult {
@@ -49,7 +53,10 @@ export class RepositoryAnalyzerService implements RepositoryAnalyzer {
     private readonly analysisRepository?: AnalysisRepository,
   ) {}
 
-  async analyze(repositoryUrl: string): Promise<RepositoryAnalysisResult> {
+  async analyze(
+    repositoryUrl: string,
+    userId?: string,
+  ): Promise<RepositoryAnalysisResult> {
     if (repositoryUrl.length > 2048) {
       throw new RepositoryAnalyzerError("Invalid GitHub repository URL");
     }
@@ -96,13 +103,18 @@ export class RepositoryAnalyzerService implements RepositoryAnalyzer {
     const analysis = await this.llmService.analyzeFiles(sourceFiles, context);
     let analysisId: string | undefined;
     if (this.analysisRepository) {
+      if (!userId) {
+        throw new RepositoryAnalyzerError("Authenticated user is required");
+      }
       const persistenceInput: PersistedAnalysisInput = {
+        userId,
         repositoryUrl,
         owner,
         repositoryName: metadata.name,
         commitSha: null,
         repository: metadata,
         selectedFiles,
+        analyzedFiles: sourceFiles.map((file) => file.path),
         analysis,
         createdAt: new Date(),
       };
@@ -130,34 +142,45 @@ export class RepositoryAnalyzerService implements RepositoryAnalyzer {
     repository: string,
     selectedFiles: RepositoryFile[],
   ): Promise<SelectedSourceFile[]> {
-    const results: Array<SelectedSourceFile | null> = await Promise.all(
-      selectedFiles.map(async (file) => {
-        try {
-          const sourceFile: SelectedSourceFile = {
-            path: file.path,
-            content: await this.githubClient.getFileContent(
-              owner,
-              repository,
-              file.path,
-            ),
-          };
-          const language = this.getLanguage(file.path);
-          if (language) {
-            sourceFile.language = language;
-          }
-          return sourceFile;
-        } catch (error) {
-          this.logger.warn(
-            `Skipping ${file.path} because its content could not be retrieved`,
-          );
-          return null;
-        }
-      }),
-    );
+    const results: SelectedSourceFile[] = [];
+    let totalBytes = 0;
 
-    return results.filter(
-      (sourceFile): sourceFile is SelectedSourceFile => sourceFile !== null,
-    );
+    for (const file of selectedFiles) {
+      try {
+        const content = await this.githubClient.getFileContent(
+          owner,
+          repository,
+          file.path,
+        );
+        const contentBytes = Buffer.byteLength(content, "utf8");
+        if (contentBytes > env.maxSourceFileBytes) {
+          this.logger.warn(
+            `Skipping ${file.path} because it exceeds the source-file size limit`,
+          );
+          continue;
+        }
+        if (totalBytes + contentBytes > env.maxSourceContentBytes) {
+          this.logger.warn(
+            `Skipping ${file.path} because the source-content limit was reached`,
+          );
+          continue;
+        }
+
+        const sourceFile: SelectedSourceFile = { path: file.path, content };
+        const language = this.getLanguage(file.path);
+        if (language) {
+          sourceFile.language = language;
+        }
+        results.push(sourceFile);
+        totalBytes += contentBytes;
+      } catch (error) {
+        this.logger.warn(
+          `Skipping ${file.path} because its content could not be retrieved`,
+        );
+      }
+    }
+
+    return results;
   }
 
   private buildContext(
@@ -213,22 +236,37 @@ export class RepositoryAnalyzerService implements RepositoryAnalyzer {
     if (
       !["http:", "https:"].includes(url.protocol) ||
       !["github.com", "www.github.com"].includes(url.hostname.toLowerCase()) ||
+      url.port ||
+      url.username ||
+      url.password ||
       url.search ||
       url.hash
     ) {
       throw new RepositoryAnalyzerError("Invalid GitHub repository URL");
     }
 
-    const segments = url.pathname.split("/").filter(Boolean);
-    if (segments.length !== 2) {
+    const segments = url.pathname.split("/");
+    if (segments.length !== 3 || !segments[1] || !segments[2]) {
       throw new RepositoryAnalyzerError("Invalid GitHub repository URL");
     }
 
-    const owner = decodeURIComponent(segments[0] ?? "").trim();
-    const repository = decodeURIComponent(segments[1] ?? "")
-      .replace(/\.git$/, "")
-      .trim();
-    if (!owner || !repository) {
+    let owner: string;
+    let repository: string;
+    try {
+      owner = decodeURIComponent(segments[1]).trim();
+      repository = decodeURIComponent(segments[2])
+        .replace(/\.git$/, "")
+        .trim();
+    } catch (error) {
+      throw new RepositoryAnalyzerError("Invalid GitHub repository URL", {
+        cause: error,
+      });
+    }
+
+    if (
+      !/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}[A-Za-z0-9])?$/.test(owner) ||
+      !/^[A-Za-z0-9._-]{1,100}$/.test(repository)
+    ) {
       throw new RepositoryAnalyzerError("Invalid GitHub repository URL");
     }
 

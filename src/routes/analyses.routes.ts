@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { RequestHandler } from "express";
 import {
   createAskQuestionController,
   createGetAnalysisController,
@@ -11,6 +12,7 @@ import {
 import { GitHubApiClient } from "../clients/github.client";
 import { env } from "../config/env";
 import { createRateLimiter } from "../middleware/rate-limit.middleware";
+import { requireAuth } from "../middleware/auth.middleware";
 import { LlmCodeAnalysisService } from "../services/llm.service";
 import { RepositoryQuestionService } from "../services/repository-question.service";
 
@@ -21,8 +23,10 @@ export function createAnalysesRouter(
     new GitHubApiClient(),
     new LlmCodeAnalysisService(),
   ),
+  authentication: RequestHandler = requireAuth,
 ): Router {
   const router = Router();
+  router.use(authentication);
   router.get("/", createListAnalysesController(repository));
   router.post(
     "/:id/questions",

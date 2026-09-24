@@ -1,6 +1,7 @@
 import { env } from "../config/env";
 import { RepositoryMetadata } from "../clients/github.client";
-import { z } from "zod";
+import { z } from "zod/v3";
+import { zodToJsonSchema } from "zod-to-json-schema";
 
 const architectureSchema = z
   .object({
@@ -63,6 +64,11 @@ export const codeAnalysisReportSchema = z
   })
   .strict();
 
+const codeAnalysisJsonSchema = zodToJsonSchema(
+  codeAnalysisReportSchema,
+  "code_analysis_report",
+);
+
 const selectedSourceFileSchema = z
   .object({
     path: z.string().min(1),
@@ -82,6 +88,11 @@ const questionAnswerSchema = z
     relevantFiles: z.array(z.string().min(1)),
   })
   .strict();
+
+const questionAnswerJsonSchema = zodToJsonSchema(
+  questionAnswerSchema,
+  "repository_question_answer",
+);
 
 export type RepositoryQuestionAnswer = z.infer<typeof questionAnswerSchema>;
 
@@ -145,7 +156,14 @@ export class LlmCodeAnalysisService {
       body: JSON.stringify({
         model: this.model,
         temperature: 0,
-        response_format: { type: "json_object" },
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "code_analysis_report",
+            strict: true,
+            schema: codeAnalysisJsonSchema,
+          },
+        },
         messages: [
           {
             role: "system",
@@ -215,7 +233,14 @@ export class LlmCodeAnalysisService {
       body: JSON.stringify({
         model: this.model,
         temperature: 0,
-        response_format: { type: "json_object" },
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "repository_question_answer",
+            strict: true,
+            schema: questionAnswerJsonSchema,
+          },
+        },
         messages: [
           {
             role: "system",

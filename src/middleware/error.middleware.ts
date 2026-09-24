@@ -46,17 +46,26 @@ export const errorHandler: ErrorRequestHandler = (
       status: statusCode,
     }),
   );
-  response.status(statusCode).json({
-    error: isMalformedJson
-      ? "Invalid JSON request body"
-      : isNotFound
-        ? "Repository not found"
-        : statusCode === 500
-          ? "Internal Server Error"
+  const isSafeClientError =
+    typedError.name === "AnalyzeRequestValidationError" ||
+    typedError.name === "RepositoryAnalyzerError" ||
+    typedError.name === "RepositoryQuestionError";
+  const publicMessage = isMalformedJson
+    ? "Invalid JSON request body"
+    : isNotFound
+      ? "Repository not found"
+      : isSafeClientError && statusCode < 500
+        ? typedError.message
+        : statusCode === 429
+          ? "Too many requests. Please try again later."
           : statusCode === 502
             ? "Upstream service unavailable"
             : statusCode === 503
               ? "Analysis storage unavailable"
-              : typedError.message,
+              : statusCode >= 400 && statusCode < 500
+                ? "Invalid request"
+                : "Internal Server Error";
+  response.status(statusCode).json({
+    error: publicMessage,
   });
 };

@@ -115,7 +115,7 @@ function RepositoryOverview({
             View repository <ExternalLink size={15} />
           </a>
         </div>
-        <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[440px] lg:self-end">
+        <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4 lg:w-110 lg:self-end">
           <StatCard label="Stars" value={repository.stargazersCount} />
           <StatCard label="Forks" value={repository.forksCount} />
           <StatCard

@@ -31,6 +31,7 @@ export function createAskQuestionController(
           await questionService.ask(
             request.params.id as string,
             parsedBody.data.question,
+            request.user!.id,
           ),
         );
     } catch (error) {
@@ -41,12 +42,12 @@ export function createAskQuestionController(
 
 export function createListAnalysesController(repository: AnalysisRepository) {
   return async function listAnalyses(
-    _request: Request,
+    request: Request,
     response: Response,
     next: NextFunction,
   ): Promise<void> {
     try {
-      response.status(200).json(await repository.findRecent());
+      response.status(200).json(await repository.findRecent(request.user!.id));
     } catch (error) {
       next(error);
     }
@@ -71,7 +72,7 @@ export function createGetAnalysisController(repository: AnalysisRepository) {
     }
 
     try {
-      const analysis = await repository.findById(id);
+      const analysis = await repository.findById(id, request.user!.id);
       if (!analysis) {
         response.status(404).json({ error: "Analysis not found" });
         return;

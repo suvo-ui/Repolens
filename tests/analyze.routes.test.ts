@@ -1,4 +1,5 @@
 import express from "express";
+import type { RequestHandler } from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { errorHandler } from "../src/middleware/error.middleware";
@@ -57,7 +58,18 @@ const analysisResult: RepositoryAnalysisResult = {
 function testApp(analyzer: RepositoryAnalyzer) {
   const testApp = express();
   testApp.use(express.json());
-  testApp.use("/api/analyze", createAnalyzeRouter(analyzer));
+  const authenticatedTestUser: RequestHandler = (request, _response, next) => {
+    request.user = {
+      id: "507f1f77bcf86cd799439011",
+      name: "Test User",
+      email: "test@example.com",
+    };
+    next();
+  };
+  testApp.use(
+    "/api/analyze",
+    createAnalyzeRouter(analyzer, authenticatedTestUser),
+  );
   testApp.use(errorHandler);
   return testApp;
 }
@@ -90,7 +102,27 @@ describe("POST /api/analyze", () => {
     expect(response.body).toEqual(analysisResult);
     expect(analyzer.analyze).toHaveBeenCalledWith(
       "https://github.com/octocat/analyser",
+      "507f1f77bcf86cd799439011",
     );
+  });
+
+  it("enforces the analysis rate limit before calling the analyzer", async () => {
+    const analyzer: RepositoryAnalyzer = {
+      analyze: vi.fn().mockResolvedValue(analysisResult),
+    };
+    const api = testApp(analyzer);
+
+    const responses = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        request(api)
+          .post("/api/analyze")
+          .send({ repositoryUrl: "https://github.com/octocat/analyser" }),
+      ),
+    );
+
+    expect(responses.at(-1)?.status).toBe(429);
+    expect(responses.at(-1)?.headers["retry-after"]).toBeDefined();
+    expect(analyzer.analyze).toHaveBeenCalledTimes(5);
   });
 
   it("uses the existing error middleware for analyzer failures", async () => {
@@ -107,5 +139,19 @@ describe("POST /api/analyze", () => {
     expect(response.status).toBe(422);
     expect(response.body).toEqual({ error: "No analyzable files" });
     expect(response.body.stack).toBeUndefined();
+  });
+
+  it("does not expose unknown internal error messages", async () => {
+    const analyzer: RepositoryAnalyzer = {
+      analyze: vi.fn().mockRejectedValue(new Error("database password=secret")),
+    };
+
+    const response = await request(testApp(analyzer))
+      .post("/api/analyze")
+      .send({ repositoryUrl: "https://github.com/octocat/analyser" });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: "Internal Server Error" });
+    expect(JSON.stringify(response.body)).not.toContain("secret");
   });
 });
